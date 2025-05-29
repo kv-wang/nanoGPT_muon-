@@ -1,0 +1,17 @@
+logs/a44e7202-b0ac-4d5a-af73-55aa512b1b72.txt
+begin training
+  1%|          | 10/1771 [00:24<15:13,  1.93it/s]  
+step:0/1770 val_loss:10.8258 train_time:1ms step_avg:1.26ms
+step:1/1770 train_time:261ms step_avg:260.92ms
+step:2/1770 train_time:465ms step_avg:232.62ms
+step:3/1770 train_time:700ms step_avg:233.47ms
+step:4/1770 train_time:945ms step_avg:236.17ms
+step:5/1770 train_time:1180ms step_avg:236.09ms
+step:6/1770 train_time:1423ms step_avg:237.24ms
+step:7/1770 train_time:1660ms step_avg:237.11ms
+step:8/1770 train_time:1899ms step_avg:237.35ms
+step:9/1770 train_time:2140ms step_avg:237.72ms
+step:10/1770 train_time:2377ms step_avg:237.69ms
+> /data/wzx/modded-nanogpt-master/train_gpt.py(657)<module>()
+-> if last_step or (args.val_loss_every > 0 and step % args.val_loss_every == 0):
+(Pdb)

@@ -1,0 +1,99 @@
+logs/26c7653e-b9a9-4d3c-80ec-6c8241f0acf3.txt
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/data/wzx/modded-nanogpt-master/train_gpt.py", line 637, in <module>
+[rank0]:     model(inputs.to(torch.int32), targets, get_window_size_blocks(0)).backward()
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/eval_frame.py", line 655, in _fn
+[rank0]:     return fn(*args, **kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 1429, in __call__
+[rank0]:     return self._torchdynamo_orig_callable(
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 1210, in __call__
+[rank0]:     result = self._inner_convert(
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 597, in __call__
+[rank0]:     return _compile(
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 1056, in _compile
+[rank0]:     guarded_code = compile_inner(code, one_graph, hooks, transform)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_utils_internal.py", line 97, in wrapper_function
+[rank0]:     return function(*args, **kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 758, in compile_inner
+[rank0]:     return _compile_inner(code, one_graph, hooks, transform)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 794, in _compile_inner
+[rank0]:     out_code = transform_code_object(code, transform)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/bytecode_transformation.py", line 1422, in transform_code_object
+[rank0]:     transformations(instructions, code_options)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 256, in _fn
+[rank0]:     return fn(*args, **kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 712, in transform
+[rank0]:     tracer.run()
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 3335, in run
+[rank0]:     super().run()
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 1236, in run
+[rank0]:     while self.step():
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 1146, in step
+[rank0]:     self.dispatch_table[inst.opcode](self, inst)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 3531, in RETURN_VALUE
+[rank0]:     self._return(inst)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 3516, in _return
+[rank0]:     self.output.compile_subgraph(
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/output_graph.py", line 1141, in compile_subgraph
+[rank0]:     self.compile_and_call_fx_graph(
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/output_graph.py", line 1434, in compile_and_call_fx_graph
+[rank0]:     compiled_fn = self.call_user_compiler(gm)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/output_graph.py", line 1484, in call_user_compiler
+[rank0]:     return self._call_user_compiler(gm)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/output_graph.py", line 1516, in _call_user_compiler
+[rank0]:     compiled_fn = compiler_fn(gm, self.example_inputs())
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/repro/after_dynamo.py", line 150, in __call__
+[rank0]:     compiled_gm = compiler_fn(gm, example_inputs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/__init__.py", line 2349, in __call__
+[rank0]:     return compile_fx(model_, inputs_, config_patches=self.config)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_inductor/compile_fx.py", line 2087, in compile_fx
+[rank0]:     return aot_autograd(
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/backends/common.py", line 101, in __call__
+[rank0]:     cg = aot_module_simplified(gm, example_inputs, **self.kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_functorch/aot_autograd.py", line 1160, in aot_module_simplified
+[rank0]:     compiled_fn = AOTAutogradCache.load(
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_functorch/_aot_autograd/autograd_cache.py", line 775, in load
+[rank0]:     compiled_fn = dispatch_and_compile()
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_functorch/aot_autograd.py", line 1145, in dispatch_and_compile
+[rank0]:     compiled_fn, _ = create_aot_dispatcher_function(
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_functorch/aot_autograd.py", line 570, in create_aot_dispatcher_function
+[rank0]:     return _create_aot_dispatcher_function(
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_functorch/aot_autograd.py", line 820, in _create_aot_dispatcher_function
+[rank0]:     compiled_fn, fw_metadata = compiler_fn(
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_functorch/_aot_autograd/jit_compile_runtime_wrappers.py", line 840, in aot_dispatch_autograd
+[rank0]:     fw_module, bw_module = aot_config.partition_fn(
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_inductor/compile_fx.py", line 1980, in partition_fn
+[rank0]:     _recursive_joint_graph_passes(gm)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_inductor/compile_fx.py", line 367, in _recursive_joint_graph_passes
+[rank0]:     joint_graph_passes(gm)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_inductor/fx_passes/joint_graph.py", line 561, in joint_graph_passes
+[rank0]:     ).apply_graph_pass(patterns.apply)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/fx/passes/graph_transform_observer.py", line 85, in apply_graph_pass
+[rank0]:     return pass_fn(self.gm.graph)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_inductor/pattern_matcher.py", line 1858, in apply
+[rank0]:     m = entry.pattern.match(node)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_inductor/pattern_matcher.py", line 369, in match
+[rank0]:     return MatchContext([self], graph=node.graph).match(self, node)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_inductor/pattern_matcher.py", line 346, in match
+[rank0]:     m = pattern._match(node, self)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_inductor/pattern_matcher.py", line 676, in _match
+[rank0]:     child_match = ctx.match(pattern, child_node)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_inductor/pattern_matcher.py", line 346, in match
+[rank0]:     m = pattern._match(node, self)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_inductor/pattern_matcher.py", line 638, in _match
+[rank0]:     if not self._match_fns(node) or len(node.args) != len(self.args):
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_inductor/pattern_matcher.py", line 527, in _match_fns
+[rank0]:     and extract_target(node) in self.fns_set
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/utils/_ordered_set.py", line 39, in __contains__
+[rank0]:     return elem in self._dict
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_ops.py", line 764, in __hash__
+[rank0]:     return hash(self._op)
+[rank0]: KeyboardInterrupt

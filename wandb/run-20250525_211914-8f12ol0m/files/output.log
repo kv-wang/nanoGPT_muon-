@@ -1,0 +1,17 @@
+logs/fd53bcd7-a307-481d-ad38-f8e00a4b46d4.txt
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/data/wzx/modded-nanogpt-master/train_gpt.py", line 556, in <module>
+[rank0]:     model: nn.Module = GPT(vocab_size=args.vocab_size, num_layers=12, num_heads=6, model_dim=768,
+[rank0]:   File "/data/wzx/modded-nanogpt-master/train_gpt.py", line 398, in __init__
+[rank0]:     self.value_embeds = nn.ModuleList([nn.Embedding(vocab_size, model_dim) for _ in range(3)])
+[rank0]:   File "/data/wzx/modded-nanogpt-master/train_gpt.py", line 398, in <listcomp>
+[rank0]:     self.value_embeds = nn.ModuleList([nn.Embedding(vocab_size, model_dim) for _ in range(3)])
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/nn/modules/sparse.py", line 170, in __init__
+[rank0]:     self.reset_parameters()
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/nn/modules/sparse.py", line 181, in reset_parameters
+[rank0]:     init.normal_(self.weight)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/nn/init.py", line 193, in normal_
+[rank0]:     return _no_grad_normal_(tensor, mean, std, generator)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/nn/init.py", line 22, in _no_grad_normal_
+[rank0]:     return tensor.normal_(mean, std, generator=generator)
+[rank0]: KeyboardInterrupt

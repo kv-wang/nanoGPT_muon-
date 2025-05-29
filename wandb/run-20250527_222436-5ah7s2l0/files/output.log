@@ -1,0 +1,40 @@
+Traceback (most recent call last):
+  File "/data/wzx/modded-nanogpt-master/train_gpt.py", line 78, in <module>
+    from torch.nn.attention.flex_attention import BlockMask, flex_attention
+  File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/nn/attention/flex_attention.py", line 15, in <module>
+    from torch._dynamo._trace_wrapped_higher_order_op import TransformGetItemToIndex
+  File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/__init__.py", line 13, in <module>
+    from . import convert_frame, eval_frame, resume_execution
+  File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 52, in <module>
+    from torch._dynamo.symbolic_convert import TensorifyState
+  File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 52, in <module>
+    from torch._dynamo.exc import TensorifyScalarRestartAnalysis
+  File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/exc.py", line 41, in <module>
+    from .utils import counters
+  File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/utils.py", line 69, in <module>
+    import torch.fx.experimental.symbolic_shapes
+  File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/fx/experimental/symbolic_shapes.py", line 67, in <module>
+    from torch.utils._sympy.functions import (
+  File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/utils/_sympy/functions.py", line 9, in <module>
+    import sympy
+  File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/sympy/__init__.py", line 77, in <module>
+    from .polys import (Poly, PurePoly, poly_from_expr, parallel_poly_from_expr,
+  File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/sympy/polys/__init__.py", line 124, in <module>
+    from .partfrac import apart, apart_list, assemble_partfrac_list
+  File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/sympy/polys/partfrac.py", line 15, in <module>
+    def apart(f, x=None, full=False, **options):
+  File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/sympy/utilities/decorator.py", line 82, in xthreaded
+    return threaded_factory(func, False)
+  File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/sympy/utilities/decorator.py", line 19, in threaded_factory
+    from sympy.matrices import MatrixBase
+  File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/sympy/matrices/__init__.py", line 22, in <module>
+    from .immutable import ImmutableDenseMatrix, ImmutableSparseMatrix
+  File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/sympy/matrices/immutable.py", line 8, in <module>
+    from sympy.matrices.expressions import MatrixExpr
+  File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/sympy/matrices/expressions/__init__.py", line 16, in <module>
+    from .hadamard import hadamard_product, HadamardProduct, hadamard_power, HadamardPower
+  File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/sympy/matrices/expressions/hadamard.py", line 313, in <module>
+    class HadamardPower(MatrixExpr):
+  File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/sympy/core/basic.py", line 212, in __init_subclass__
+    def __init_subclass__(cls):
+KeyboardInterrupt

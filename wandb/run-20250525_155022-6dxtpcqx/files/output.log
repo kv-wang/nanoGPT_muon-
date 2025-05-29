@@ -1,0 +1,17 @@
+logs/d794b452-9192-40dd-85f8-f17e71175307.txt
+begin training
+  1%|▌                                                                                                    | 10/1771 [00:24<15:15,  1.92it/s]
+step:0/1770 val_loss:10.8258 train_time:1ms step_avg:1.29ms
+step:1/1770 train_time:223ms step_avg:222.89ms
+step:2/1770 train_time:416ms step_avg:208.25ms
+step:3/1770 train_time:644ms step_avg:214.66ms
+step:4/1770 train_time:895ms step_avg:223.85ms
+step:5/1770 train_time:1108ms step_avg:221.63ms
+step:6/1770 train_time:1352ms step_avg:225.31ms
+step:7/1770 train_time:1578ms step_avg:225.46ms
+step:8/1770 train_time:1802ms step_avg:225.23ms
+step:9/1770 train_time:2039ms step_avg:226.54ms
+step:10/1770 train_time:2290ms step_avg:229.05ms
+> /data/wzx/modded-nanogpt-master/train_gpt.py(655)<module>()
+-> if last_step or (args.val_loss_every > 0 and step % args.val_loss_every == 0):
+--KeyboardInterrupt--

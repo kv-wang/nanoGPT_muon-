@@ -1,0 +1,18 @@
+logs/29d3bd51-acad-4438-a8aa-b6988d36f578.txt
+begin training
+  0%|                                                                                                                              | 0/1771 [00:25<?, ?it/s]
+step:0/1770 val_loss:10.8258 train_time:1ms step_avg:1.04ms
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/data/wzx/modded-nanogpt-master/train_gpt.py", line 738, in <module>
+[rank0]:     opt.step()
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/optim/optimizer.py", line 485, in wrapper
+[rank0]:     out = func(*args, **kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
+[rank0]:     return func(*args, **kwargs)
+[rank0]:   File "/data/wzx/modded-nanogpt-master/train_gpt.py", line 279, in step
+[rank0]:     handle = dist.all_gather_into_tensor(update_buffer, g_muon, async_op=True)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/distributed/c10d_logger.py", line 81, in wrapper
+[rank0]:     return func(*args, **kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/distributed/distributed_c10d.py", line 3864, in all_gather_into_tensor
+[rank0]:     work = group._allgather_base(output_tensor, input_tensor, opts)
+[rank0]: RuntimeError: [Rank 0]: Ranks 1 failed to pass monitoredBarrier in 600000 ms

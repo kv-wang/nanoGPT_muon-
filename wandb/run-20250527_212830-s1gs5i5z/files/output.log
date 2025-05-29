@@ -1,0 +1,5 @@
+logs/c0a7e1fb-b7b2-4ed0-934a-0de269ba56da.txt
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/data/wzx/modded-nanogpt-master/train_gpt.py", line 590, in <module>
+[rank0]:     optimizer6 = torch.nn.optim.Adam(adam_params_2, betas=(0.8, 0.95), eps=1e-10, fused=True)
+[rank0]: AttributeError: module 'torch.nn' has no attribute 'optim'

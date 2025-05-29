@@ -1,0 +1,72 @@
+{
+  "os": "Linux-5.15.0-67-generic-x86_64-with-glibc2.31",
+  "python": "CPython 3.10.16",
+  "startedAt": "2025-05-27T13:30:03.501677Z",
+  "args": [
+    "--muon_type",
+    "adamw"
+  ],
+  "program": "/data/wzx/modded-nanogpt-master/train_gpt.py",
+  "codePath": "train_gpt.py",
+  "email": "herowangzx@sina.com",
+  "root": "/data/wzx/modded-nanogpt-master",
+  "host": "zkti",
+  "executable": "/data/wzx/miniconda3/envs/nanogpt/bin/python3.1",
+  "codePathLocal": "train_gpt.py",
+  "cpu_count": 64,
+  "cpu_count_logical": 128,
+  "gpu": "NVIDIA L40",
+  "gpu_count": 6,
+  "disk": {
+    "/": {
+      "total": "878357635072",
+      "used": "105512857600"
+    }
+  },
+  "memory": {
+    "total": "270095118336"
+  },
+  "cpu": {
+    "count": 64,
+    "countLogical": 128
+  },
+  "gpu_nvidia": [
+    {
+      "name": "NVIDIA L40",
+      "memoryTotal": "48305799168",
+      "cudaCores": 18176,
+      "architecture": "Ada"
+    },
+    {
+      "name": "NVIDIA L40",
+      "memoryTotal": "48305799168",
+      "cudaCores": 18176,
+      "architecture": "Ada"
+    },
+    {
+      "name": "NVIDIA L40",
+      "memoryTotal": "48305799168",
+      "cudaCores": 18176,
+      "architecture": "Ada"
+    },
+    {
+      "name": "NVIDIA L40",
+      "memoryTotal": "48305799168",
+      "cudaCores": 18176,
+      "architecture": "Ada"
+    },
+    {
+      "name": "NVIDIA L40",
+      "memoryTotal": "48305799168",
+      "cudaCores": 18176,
+      "architecture": "Ada"
+    },
+    {
+      "name": "NVIDIA L40",
+      "memoryTotal": "48305799168",
+      "cudaCores": 18176,
+      "architecture": "Ada"
+    }
+  ],
+  "cudaVersion": "12.4"
+}

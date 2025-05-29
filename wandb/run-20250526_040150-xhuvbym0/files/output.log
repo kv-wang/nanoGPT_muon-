@@ -1,0 +1,11 @@
+logs/588e4253-c589-4eda-8eaf-0ae57d1609be.txt
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/data/wzx/modded-nanogpt-master/train_gpt.py", line 641, in <module>
+[rank0]:     opt.step()
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/optim/optimizer.py", line 485, in wrapper
+[rank0]:     out = func(*args, **kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
+[rank0]:     return func(*args, **kwargs)
+[rank0]:   File "/data/wzx/modded-nanogpt-master/train_gpt.py", line 270, in step
+[rank0]:     buf.lerp_(g_ortho, 1 - group["momentum"])
+[rank0]: RuntimeError: expected dtype float for `end` but got dtype c10::BFloat16

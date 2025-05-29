@@ -1,0 +1,15 @@
+logs/9466c0cd-cf79-498a-8e2b-fec46d64bc0d.txt
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/data/wzx/modded-nanogpt-master/train_gpt.py", line 641, in <module>
+[rank0]:     opt.step()
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/optim/optimizer.py", line 485, in wrapper
+[rank0]:     out = func(*args, **kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
+[rank0]:     return func(*args, **kwargs)
+[rank0]:   File "/data/wzx/modded-nanogpt-master/train_gpt.py", line 274, in step
+[rank0]:     handle = dist.all_gather_into_tensor(update_buffer, g_muon, async_op=True)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/distributed/c10d_logger.py", line 81, in wrapper
+[rank0]:     return func(*args, **kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/distributed/distributed_c10d.py", line 3864, in all_gather_into_tensor
+[rank0]:     work = group._allgather_base(output_tensor, input_tensor, opts)
+[rank0]: TypeError: output tensor must have the same type as input tensor

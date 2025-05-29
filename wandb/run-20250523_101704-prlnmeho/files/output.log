@@ -1,0 +1,115 @@
+logs/4680166d-6bb4-4b78-835f-5652fdc37bb2.txt
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/data/wzx/modded-nanogpt-master/train_gpt.py", line 619, in <module>
+[rank0]:     model(inputs.to(torch.int32), targets, get_window_size_blocks(0)).backward()
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/eval_frame.py", line 655, in _fn
+[rank0]:     return fn(*args, **kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 1429, in __call__
+[rank0]:     return self._torchdynamo_orig_callable(
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 1210, in __call__
+[rank0]:     result = self._inner_convert(
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 597, in __call__
+[rank0]:     return _compile(
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 1056, in _compile
+[rank0]:     guarded_code = compile_inner(code, one_graph, hooks, transform)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_utils_internal.py", line 97, in wrapper_function
+[rank0]:     return function(*args, **kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 758, in compile_inner
+[rank0]:     return _compile_inner(code, one_graph, hooks, transform)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 794, in _compile_inner
+[rank0]:     out_code = transform_code_object(code, transform)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/bytecode_transformation.py", line 1422, in transform_code_object
+[rank0]:     transformations(instructions, code_options)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 256, in _fn
+[rank0]:     return fn(*args, **kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 712, in transform
+[rank0]:     tracer.run()
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 3335, in run
+[rank0]:     super().run()
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 1236, in run
+[rank0]:     while self.step():
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 1146, in step
+[rank0]:     self.dispatch_table[inst.opcode](self, inst)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 814, in wrapper
+[rank0]:     return inner_fn(self, inst)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 2008, in CALL_FUNCTION
+[rank0]:     self.call_function(fn, args, {})
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 1070, in call_function
+[rank0]:     self.push(fn.call_function(self, args, kwargs))  # type: ignore[arg-type]
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/variables/lazy.py", line 201, in realize_and_forward
+[rank0]:     return getattr(self.realize(), name)(*args, **kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/variables/nn_module.py", line 952, in call_function
+[rank0]:     return variables.UserFunctionVariable(fn, source=source).call_function(
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/variables/functions.py", line 405, in call_function
+[rank0]:     return super().call_function(tx, args, kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/variables/functions.py", line 186, in call_function
+[rank0]:     return tx.inline_user_function_return(self, [*self.self_args(), *args], kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 1087, in inline_user_function_return
+[rank0]:     return InliningInstructionTranslator.inline_call(self, fn, args, kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 3556, in inline_call
+[rank0]:     return tracer.inline_call_()
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 3735, in inline_call_
+[rank0]:     self.run()
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 1236, in run
+[rank0]:     while self.step():
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 1146, in step
+[rank0]:     self.dispatch_table[inst.opcode](self, inst)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 814, in wrapper
+[rank0]:     return inner_fn(self, inst)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 2008, in CALL_FUNCTION
+[rank0]:     self.call_function(fn, args, {})
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 1070, in call_function
+[rank0]:     self.push(fn.call_function(self, args, kwargs))  # type: ignore[arg-type]
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/variables/lazy.py", line 201, in realize_and_forward
+[rank0]:     return getattr(self.realize(), name)(*args, **kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/variables/nn_module.py", line 952, in call_function
+[rank0]:     return variables.UserFunctionVariable(fn, source=source).call_function(
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/variables/functions.py", line 405, in call_function
+[rank0]:     return super().call_function(tx, args, kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/variables/functions.py", line 186, in call_function
+[rank0]:     return tx.inline_user_function_return(self, [*self.self_args(), *args], kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 1087, in inline_user_function_return
+[rank0]:     return InliningInstructionTranslator.inline_call(self, fn, args, kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 3556, in inline_call
+[rank0]:     return tracer.inline_call_()
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 3735, in inline_call_
+[rank0]:     self.run()
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 1236, in run
+[rank0]:     while self.step():
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 1146, in step
+[rank0]:     self.dispatch_table[inst.opcode](self, inst)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 814, in wrapper
+[rank0]:     return inner_fn(self, inst)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 2118, in CALL_FUNCTION_KW
+[rank0]:     self.call_function(fn, args, kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 1070, in call_function
+[rank0]:     self.push(fn.call_function(self, args, kwargs))  # type: ignore[arg-type]
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/variables/functions.py", line 405, in call_function
+[rank0]:     return super().call_function(tx, args, kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/variables/functions.py", line 186, in call_function
+[rank0]:     return tx.inline_user_function_return(self, [*self.self_args(), *args], kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 1087, in inline_user_function_return
+[rank0]:     return InliningInstructionTranslator.inline_call(self, fn, args, kwargs)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 3556, in inline_call
+[rank0]:     return tracer.inline_call_()
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 3735, in inline_call_
+[rank0]:     self.run()
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 1236, in run
+[rank0]:     while self.step():
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 1146, in step
+[rank0]:     self.dispatch_table[inst.opcode](self, inst)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 814, in wrapper
+[rank0]:     return inner_fn(self, inst)
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 2008, in CALL_FUNCTION
+[rank0]:     self.call_function(fn, args, {})
+[rank0]:   File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 1061, in call_function
+[rank0]:     for x in itertools.chain(args, kwargs.values())
+[rank0]: KeyboardInterrupt

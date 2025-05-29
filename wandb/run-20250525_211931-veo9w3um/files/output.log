@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/data/wzx/modded-nanogpt-master/train_gpt.py", line 71, in <module>
+    torch.empty(1, device="cuda", requires_grad=True).backward() # prevents a bug on some systems
+  File "/data/wzx/miniconda3/envs/nanogpt/lib/python3.10/site-packages/torch/cuda/__init__.py", line 372, in _lazy_init
+    torch._C._cuda_init()
+KeyboardInterrupt

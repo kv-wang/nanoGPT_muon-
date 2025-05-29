@@ -1,0 +1,5 @@
+logs/42776191-56c8-4c68-97e7-f54dda7e2d4d.txt
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/data/wzx/modded-nanogpt-master/train_gpt.py", line 604, in <module>
+[rank0]:     for opt in optimizers:
+[rank0]: NameError: name 'optimizers' is not defined
