@@ -1,4 +1,4 @@
-export WANDB_API_KEY="2eaf5d3e15da1d68fbce32137184e1eaba001ff6"
+export WANDB_API_KEY=""
 export TORCH_DISTRIBUTED_DEBUG=DETAIL
 
 start0=0.80

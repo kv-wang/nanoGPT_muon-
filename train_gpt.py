@@ -19,6 +19,8 @@ parser.add_argument("--warm_start", type = float, default=0.85, help="Warmup sta
 parser.add_argument("--muon_momentum_0", type=float, default=0.95, help="Muon momentum[0] for nesterov")
 parser.add_argument("--muon_momentum_1", type=float, default=0.95, help="Muon momentum[1] for buf")
 parser.add_argument("--muon_type", type=str, default="default", choices=["adam","default", "double_momentum", "svd_momentum", "svd_momentum_v2"], help="Muon optimizer type")
+parser.add_argument("--enable_grad_accu", type=str, default="no", choices=["yes", "no"], help="Whether to enable gradient accumulation")
+parser.add_argument("--grad_accu_steps", type=int, default=32, help="Number of gradient accumulation steps when enabled")
 cli_args = parser.parse_args()
 
 rank = int(os.environ["RANK"])
@@ -40,8 +42,14 @@ class Hyperparameters:
     # evaluation and logging
     val_loss_every = 125 # every how many steps to evaluate val loss? 0 for only at the end
     save_checkpoint = False
-    gradient_accumulation_steps = 5 * 8
+    
 args = Hyperparameters()
+
+# 根据命令行参数设置梯度累积
+if cli_args.enable_grad_accu == "yes":
+    args.gradient_accumulation_steps = cli_args.grad_accu_steps
+else:
+    args.gradient_accumulation_steps = 1
 
 cfg = {
     "default": cli_args.muon_momentum_0,
@@ -57,10 +65,15 @@ if cli_args.wandb == "yes":
         os.makedirs("logs", exist_ok=True)
         logfile = f"logs/{run_id}.txt"
         print(logfile)
+        
+        # 合并超参数和CLI参数用于wandb配置
+        config_dict = vars(args).copy()
+        config_dict.update(vars(cli_args))
+        
         wandb.init(
             project="muon_nanogpt_NS_v1" + str([args.train_seq_len, args.val_seq_len]),  # <-- 修改为你的wandb项目名
-            name=cli_args.muon_type + str([cli_args.muon_momentum_0]),
-            config=vars(args),
+            name=cli_args.muon_type + str([cli_args.muon_momentum_0]) + ("_grad_accu" if cli_args.enable_grad_accu == "yes" else ""),
+            config=config_dict,
         )
 def print0(s, console=False):
     if master_process:
@@ -543,6 +556,11 @@ def print0(s, console=False):
 # begin by printing this file (the Python code)
 print0(code)
 print0("="*100)
+print0(f"Gradient Accumulation: {'Enabled' if cli_args.enable_grad_accu == 'yes' else 'Disabled'}")
+if cli_args.enable_grad_accu == "yes":
+    print0(f"Gradient Accumulation Steps: {args.gradient_accumulation_steps}")
+print0(f"Muon Type: {cli_args.muon_type}")
+print0("="*100)
 # log information about the hardware/software environment this is running on
 print0(f"Running Python {sys.version}")
 print0(f"Running PyTorch {torch.version.__version__} compiled for CUDA {torch.version.cuda}")
@@ -699,14 +717,34 @@ for step in tqdm(range(train_steps + 1)):
         break
 
     # --------------- TRAINING SECTION -----------------
-    inputs, targets = next(train_loader)
-    model(inputs, targets, get_window_size_blocks(step)).backward()
-    for param in model.parameters():
-        dist.all_reduce(param.grad, op=dist.ReduceOp.AVG)
-    # set optimization hyperparameters
+    if args.gradient_accumulation_steps > 1:
+        # 梯度累积实现
+        for micro_step in range(args.gradient_accumulation_steps):
+            inputs, targets = next(train_loader)
+            
+            # 计算损失并缩放
+            loss = model(inputs, targets, get_window_size_blocks(step))
+            loss = loss / args.gradient_accumulation_steps  # 缩放损失以考虑梯度累积
+            
+            # 反向传播
+            loss.backward()
+
+        # 在所有micro步骤完成后，进行梯度同步和优化器步骤
+        for param in model.parameters():
+            dist.all_reduce(param.grad, op=dist.ReduceOp.AVG)
+    else:
+        # 原始实现（无梯度累积）
+        inputs, targets = next(train_loader)
+        model(inputs, targets, get_window_size_blocks(step)).backward()
+        for param in model.parameters():
+            dist.all_reduce(param.grad, op=dist.ReduceOp.AVG)
+    
+    # 设置优化超参数
     for opt in optimizers:
         for group in opt.param_groups:
             group["lr"] = group["initial_lr"] * get_lr(step)
+    
+    # 学习率 warmup（根据 muon_type 调整）
     if cli_args.muon_type == "default":
         for group in optimizer2.param_groups:
             frac = min(step / 300, 1) # momentum warmup for muon
