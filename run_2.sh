@@ -1,5 +1,15 @@
 export WANDB_API_KEY=""
 export TORCH_DISTRIBUTED_DEBUG=DETAIL
+export CUDA_VISIBLE_DEVICES=2,3,4,5
+
+torchrun --standalone --nproc_per_node=4 \
+  train_gpt.py \
+  --muon_type default \
+  --muon_momentum_0 0.95 \
+  --muon_momentum_1 0.95 \
+  --wandb no
+
+
 
 start0=0.80
 end0=0.92
@@ -18,7 +28,7 @@ for m0 in $(seq $start0 $step0 $end0); do
       --muon_type double_momentum \
       --muon_momentum_0 $m0 \
       --muon_momentum_1 $m1 \
-      --wandb yes
+      --wandb no
   done
 done
 
@@ -32,5 +42,5 @@ for m in $(seq $start $step $end); do
     train_gpt.py \
     --muon_type svd_momentum_v2 \
     --muon_momentum_0 $m \
-    --wandb yes
+    --wandb no
 done

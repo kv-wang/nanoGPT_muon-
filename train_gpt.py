@@ -12,9 +12,11 @@ from pathlib import Path
 import wandb
 import argparse
 from tqdm import tqdm
+# 添加TensorBoard支持
+from torch.utils.tensorboard import SummaryWriter
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--wandb", type = str, default="yes", choices=["yes", "no"], help="Whether to use wandb for logging")
+parser.add_argument("--wandb", type = str, default="no", choices=["yes", "no"], help="Whether to use wandb for logging")
 parser.add_argument("--warm_start", type = float, default=0.85, help="Warmup start value")
 parser.add_argument("--muon_momentum_0", type=float, default=0.95, help="Muon momentum[0] for nesterov")
 parser.add_argument("--muon_momentum_1", type=float, default=0.95, help="Muon momentum[1] for buf")
@@ -57,6 +59,13 @@ cfg = {
     "svd_momentum": cli_args.muon_momentum_0,
     "svd_momentum_v2": cli_args.muon_momentum_0, 
 }
+
+# 创建TensorBoard writer
+name = cli_args.muon_type + str([cli_args.muon_momentum_0, cli_args.muon_momentum_1]) + ("_grad_accu" if cli_args.enable_grad_accu == "yes" else "")
+tensorboard_writer = SummaryWriter(f'logs_tensorboard/run_2/{name}')
+if master_process:
+    print(f"TensorBoard logs will be saved to: logs_tensorboard/{name}")
+
 # begin logging
 logfile = None
 if cli_args.wandb == "yes":
@@ -703,6 +712,11 @@ for step in tqdm(range(train_steps + 1)):
         print0(f"step:{step}/{train_steps} val_loss:{val_loss:.4f} train_time:{training_time_ms:.0f}ms step_avg:{training_time_ms/max(step, 1):.2f}ms", console=True)
         if master_process and cli_args.wandb == "yes":
             wandb.log({"val_loss": float(val_loss), "step": step})
+        # 添加TensorBoard记录
+        if master_process and tensorboard_writer is not None:
+            tensorboard_writer.add_scalar('Validation/Loss', float(val_loss), step)
+            tensorboard_writer.add_scalar('Training/Time_ms', training_time_ms, step)
+            tensorboard_writer.add_scalar('Training/Step_avg_ms', training_time_ms/max(step, 1), step)
         model.train()
         # start the clock again
         torch.cuda.synchronize()
@@ -775,4 +789,10 @@ for step in tqdm(range(train_steps + 1)):
         #wandb.log({"train_loss": float(train_loss), "step": step + 1})
 print0(f"peak memory allocated: {torch.cuda.max_memory_allocated() // 1024 // 1024} MiB "
        f"reserved: {torch.cuda.max_memory_reserved() // 1024 // 1024} MiB", console=True)
+
+# 关闭TensorBoard writer
+if master_process and tensorboard_writer is not None:
+    tensorboard_writer.close()
+    print0("TensorBoard writer closed", console=True)
+
 dist.destroy_process_group()

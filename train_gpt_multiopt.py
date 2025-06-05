@@ -12,11 +12,13 @@ from pathlib import Path
 import wandb
 import argparse
 from tqdm import tqdm
+# 添加TensorBoard支持
+from torch.utils.tensorboard import SummaryWriter
 
 def parse_float_list(s):
     return list(map(float, s.split()))
 parser = argparse.ArgumentParser()
-parser.add_argument("--wandb", type = str, default="yes", choices=["yes", "no"], help="Whether to use wandb for logging")
+parser.add_argument("--wandb", type = str, default="no", choices=["yes", "no"], help="Whether to use wandb for logging")
 parser.add_argument("--warm_start", type = float, default=0.85, help="Warmup start value")
 parser.add_argument("--cfg_1", type=float, nargs=2, default=[0.90, 0.95], help="config of 1st optimizer")
 parser.add_argument("--cfg_2", type=float, nargs=2, default=[0.95, 0.99], help="config of 2nd optimizer")
@@ -48,8 +50,12 @@ class Hyperparameters:
 args = Hyperparameters()
 
 
+name=cli_args.muon_type_1 + str(cli_args.cfg_1)+ "_" + cli_args.muon_type_2 + str(cli_args.cfg_2),
+tensorboard_writer = SummaryWriter(f'logs_tensorboard/{name}')
+print(f"TensorBoard logs will be saved to: logs_tensorboard/{name}")
 # begin logging
 logfile = None
+
 if cli_args.wandb == "yes":
     if master_process:
         run_id = uuid.uuid4()
@@ -61,6 +67,8 @@ if cli_args.wandb == "yes":
             name=cli_args.muon_type_1 + str(cli_args.cfg_1)+ "_" + cli_args.muon_type_2 + str(cli_args.cfg_2),
             config=vars(args),
         )
+        # 初始化TensorBoard writer
+     
 def print0(s, console=False):
     if master_process:
         with open(logfile, "a") as f:
@@ -522,7 +530,7 @@ def distributed_data_generator(filename_pattern: str, batch_size: int, rank : in
 # torchrun sets these env variables
 rank = int(os.environ["RANK"])
 world_size = int(os.environ["WORLD_SIZE"])
-assert world_size == 1 # this code is designed for 8xH100
+ # this code is designed for 8xH100
 assert torch.cuda.is_available()
 device = torch.device("cuda", int(os.environ["LOCAL_RANK"]))
 torch.cuda.set_device(device)
@@ -675,6 +683,11 @@ for step in tqdm(range(train_steps + 1)):
         print0(f"step:{step}/{train_steps} val_loss:{val_loss:.4f} train_time:{training_time_ms:.0f}ms step_avg:{training_time_ms/max(step, 1):.2f}ms", console=True)
         if master_process and cli_args.wandb == "yes":
             wandb.log({"val_loss": float(val_loss), "step": step})
+        # 添加TensorBoard记录
+        if master_process and tensorboard_writer is not None:
+            tensorboard_writer.add_scalar('Validation/Loss', float(val_loss), step)
+            tensorboard_writer.add_scalar('Training/Time_ms', training_time_ms, step)
+            tensorboard_writer.add_scalar('Training/Step_avg_ms', training_time_ms/max(step, 1), step)
         model.train()
         # start the clock again
         torch.cuda.synchronize()
@@ -737,4 +750,10 @@ for step in tqdm(range(train_steps + 1)):
         #wandb.log({"train_loss": float(train_loss), "step": step + 1})
 print0(f"peak memory allocated: {torch.cuda.max_memory_allocated() // 1024 // 1024} MiB "
        f"reserved: {torch.cuda.max_memory_reserved() // 1024 // 1024} MiB", console=True)
+
+# 关闭TensorBoard writer
+if master_process and tensorboard_writer is not None:
+    tensorboard_writer.close()
+    print0("TensorBoard writer closed", console=True)
+
 dist.destroy_process_group()
