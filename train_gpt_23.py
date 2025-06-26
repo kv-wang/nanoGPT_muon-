@@ -9,6 +9,22 @@ import glob
 from dataclasses import dataclass
 from functools import lru_cache, partial # Added partial for hook registration
 from pathlib import Path
+from tqdm import tqdm 
+import wandb
+import argparse
+# 添加TensorBoard支持
+from torch.utils.tensorboard import SummaryWriter
+
+# 添加命令行参数解析
+parser = argparse.ArgumentParser()
+parser.add_argument("--wandb", type = str, default="no", choices=["yes", "no"], help="Whether to use wandb for logging")
+parser.add_argument("--muon_momentum_0", type=float, default=0.95, help="Muon momentum[0] for nesterov")
+parser.add_argument("--muon_momentum_1", type=float, default=0.95, help="Muon momentum[1] for buf")
+parser.add_argument("--muon_type", type=str, default="default", help="Muon optimizer type")
+parser.add_argument("--adaptive_beta", type=str, default="no", choices=["cos","NS_cos", "no"], help="Whether to use adaptive beta based on cosine similarity")
+parser.add_argument("--tensorboard_path", type=str, default="logs_tensorboard_train23", help="Tensorboard path")
+parser.add_argument("--wandb_project", type=str, default="train_gpt_23", help="Wandb project")
+cli_args = parser.parse_args()
 
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import torch
@@ -151,14 +167,17 @@ class Muon(torch.optim.Optimizer):
 
     Arguments:
         lr: The learning rate used by the internal SGD.
-        momentum: The momentum used by the internal SGD.
-        nesterov: Whether to use Nesterov-style momentum in the internal SGD. (recommended)
+        weight_decay: Weight decay factor for regularization.
+        momentum: The momentum used by the internal SGD (can be single value or tuple for double_momentum).
         ns_steps: The number of Newton-Schulz iteration steps to use.
+        type: Momentum type - 'default', 'double_momentum', 'svd_momentum', 'svd_momentum_v2'
     """
-    def __init__(self, params, lr=0.02, momentum=0.95, nesterov=True, ns_steps=5, rank=0, world_size=1):
+    def __init__(self, params, lr=0.02, weight_decay=0.01, momentum=0.95, ns_steps=5, rank=0, world_size=1, type='default', adaptive_beta="no"):
         self.rank = rank
         self.world_size = world_size
-        defaults = dict(lr=lr, momentum=momentum, nesterov=nesterov, ns_steps=ns_steps)
+        self.type = type
+        self.adaptive_beta = cli_args.adaptive_beta
+        defaults = dict(lr=lr, weight_decay=weight_decay, momentum=momentum, ns_steps=ns_steps)
         params: list[Tensor] = [*params]
         param_groups = []
         for size in {p.numel() for p in params}:
@@ -167,6 +186,33 @@ class Muon(torch.optim.Optimizer):
                          update_buffer=b, update_buffer_views=[b[i] for i in range(world_size)])
             param_groups.append(group)
         super().__init__(param_groups, defaults)
+
+    def compute_cosine_similarity(self, g, buf, version):
+        """计算g和buf之间的余弦相似度"""
+        if version == "cos":
+            g_flat = g.flatten()
+            buf_flat = buf.flatten()
+            
+            # 计算余弦相似度
+            dot_product = torch.dot(g_flat, buf_flat)
+            g_norm = torch.norm(g_flat)
+            buf_norm = torch.norm(buf_flat)
+            
+            # 避免除零
+            cosine_sim = dot_product / (g_norm * buf_norm + 1e-8) 
+            # 确保相似度在合理范围内，使用绝对值
+            # 返回cosine_sim和0的较大值
+            return max(cosine_sim, 0)
+        elif version == "NS_cos":
+            _ortho = zeropower_via_newtonschulz5(g, steps=self.ns_steps).flatten()
+            buf_ortho = zeropower_via_newtonschulz5(buf, steps=self.ns_steps).flatten()
+            g_norm = torch.norm(g_ortho)
+            buf_norm = torch.norm(buf_ortho)
+            dot_product = torch.dot(g_ortho.flatten(), buf_ortho.flatten())
+            cosine_sim = dot_product / (g_norm * buf_norm + 1e-8) 
+            return max(cosine_sim, 0)
+    
+
 
     @torch.no_grad()
     def step(self):
@@ -180,8 +226,9 @@ class Muon(torch.optim.Optimizer):
             def update_prev(): # optimized Muon implementation contributed by @YouJiacheng
                 handle.wait()
                 for p_world, g_world in zip(params_world, update_buffer_views):
+                    p_world.mul_(1 - group["lr"] * group["weight_decay"])
                     p_world.add_(g_world.view_as(p_world),
-                                 alpha=-group["lr"] * max(1, p_world.size(-2) / p_world.size(-1))**0.5)
+                                 alpha=-group["lr"] * 0.2 * max(p_world.size(-2), p_world.size(-1))**0.5) # 按照月之暗面的paper的learning rate scaling
             for base_i in range(len(params))[::self.world_size]:
                 if base_i + self.rank < len(params):
                     p = params[base_i + self.rank]
@@ -191,13 +238,138 @@ class Muon(torch.optim.Optimizer):
                     if "momentum_buffer" not in state:
                         state["momentum_buffer"] = torch.zeros_like(g)
                     buf: Tensor = state["momentum_buffer"]
-                    buf.lerp_(g, 1 - group["momentum"])
-                    g = g.lerp_(buf, group["momentum"]) if group["nesterov"] else buf
-                    g = zeropower_via_newtonschulz5(g, steps=group["ns_steps"]).flatten()
+
+                    # 处理4D卷积滤波器
+                    if g.ndim == 4: # for the case of conv filters
+                        g = g.view(len(g), -1)
+                        buf = buf.view(len(buf), -1)
+
+                    # 根据 type 选择不同的动量和正交化策略
+                    if self.type == 'default':
+                        # 计算adaptive momentum
+                        momentum = group["momentum"]
+                        if self.adaptive_beta != "no":
+                            cosine_sim = self.compute_cosine_similarity(g, buf, self.adaptive_beta)
+                            momentum = momentum + (1-momentum) * cosine_sim
+                        
+                        buf.lerp_(g, 1 - momentum) # 0.98
+                        g_muon = g.lerp_(buf, momentum)
+                        g_muon = zeropower_via_newtonschulz5(g_muon, steps=group["ns_steps"]).flatten()
+                    elif self.type == 'double_momentum':
+                        # momentum[1] 用于 buf，momentum[0] 用于 nesterov
+                        momentum_0 = cli_args.muon_momentum_0
+                        momentum_1 = cli_args.muon_momentum_1
+                        
+                        if self.adaptive_beta != "no":
+                            cosine_sim = self.compute_cosine_similarity(g, buf, self.adaptive_beta)
+                            momentum_0 = momentum_0 + (1-momentum_0) * cosine_sim
+                            momentum_1 = momentum_1 + (1-momentum_1) * cosine_sim
+                        
+                        buf.lerp_(g, 1 - momentum_1) # 0.98
+                        g_muon = g.lerp_(buf, momentum_0) # 0.95
+                        g_muon = zeropower_via_newtonschulz5(g_muon, steps=group["ns_steps"]).flatten()
+                    
+                    elif self.type == 'double_momentum_reverse':
+                        # momentum[1] 用于 buf，momentum[0] 用于 nesterov
+                        momentum_0 = cli_args.muon_momentum_0
+                        momentum_1 = cli_args.muon_momentum_1
+                        
+                        if self.adaptive_beta != "no":
+                            cosine_sim = self.compute_cosine_similarity(g, buf, self.adaptive_beta)
+                            momentum_0 = momentum_0 + (1-momentum_0) * cosine_sim
+                            momentum_1 = momentum_1 + (1-momentum_1) * cosine_sim
+                        
+                        g_muon = buf * momentum_1 + g * (1 - momentum_1)
+                        #g_muon = g.lerp_(g_muon, momentum_1) # 0.98
+                        g_muon = zeropower_via_newtonschulz5(g_muon, steps=group["ns_steps"]).flatten()
+                        buf.lerp_(g, 1 - momentum_1) # 0.98
+                    elif self.type == 'svd_momentum':
+                        momentum = group["momentum"]
+                        if self.adaptive_beta != "no":
+                            cosine_sim = self.compute_cosine_similarity(g, buf, self.adaptive_beta)
+                            momentum = momentum + (1-momentum) * cosine_sim
+                        
+                        buf.lerp_(g, 1 - momentum)
+                        g_ortho = zeropower_via_newtonschulz5(g, steps=group["ns_steps"])
+                        buf_ortho = zeropower_via_newtonschulz5(buf, steps=group["ns_steps"])
+                        g_muon = g_ortho.lerp_(buf_ortho, momentum).flatten()
+                    elif self.type == 'NS_momentum':
+                        g_ortho = zeropower_via_newtonschulz5(g, steps=group["ns_steps"]).to(dtype=torch.float32)
+                        
+                        momentum = group["momentum"]
+                        if self.adaptive_beta != "no":
+                            cosine_sim = self.compute_cosine_similarity(g, buf, self.adaptive_beta)
+                            momentum = momentum + (1-momentum) * cosine_sim
+                        
+                        buf.lerp_(g_ortho, 1 - momentum)
+                        g_muon = g_ortho.lerp_(buf, cli_args.muon_momentum_1).flatten().to(dtype=torch.bfloat16)
+                    
+                    elif self.type == "doubleNS_momentum_v1":
+                        # 再NS_momentum的基础上，对nesterov的更新也进行NS正交化,保证update的NS正交性
+                        g_ortho = zeropower_via_newtonschulz5(g, steps=group["ns_steps"]).to(dtype=torch.float32)
+                        
+                        momentum = group["momentum"]
+                        if self.adaptive_beta != "no":
+                            cosine_sim = self.compute_cosine_similarity(g, buf, self.adaptive_beta)
+                            momentum = momentum + (1-momentum) * cosine_sim
+                        
+                        buf.lerp_(g_ortho, 1 - momentum)
+                        g_muon = g_ortho.lerp_(buf, cli_args.muon_momentum_1).to(dtype=torch.bfloat16)
+                        g_muon = zeropower_via_newtonschulz5(g_muon, steps=group["ns_steps"]).flatten()
+                    
+                    elif self.type == "doubleNS_momentum_v2":
+                        # 计算adaptive momentum
+                        '''
+                        momentum的更新方式不变, update的时候,先对G进行NS，然后以0.5的beta对nesterov步骤，最后对update进行NS正交化
+                        '''
+                        momentum = group["momentum"]
+                        if self.adaptive_beta != "no":
+
+                            
+                            cosine_sim = self.compute_cosine_similarity(g, buf, self.adaptive_beta)
+                            momentum = momentum + (1-momentum) * cosine_sim
+                        
+                        buf.lerp_(g, 1 - momentum)
+                        g_ortho = zeropower_via_newtonschulz5(g, steps=group["ns_steps"]).to(dtype=torch.float32)
+                        g_muon = g_ortho.lerp_(buf, cli_args.muon_momentum_1).to(dtype=torch.bfloat16)
+                        g_muon = zeropower_via_newtonschulz5(g_muon, steps=group["ns_steps"]).flatten()
+                    
+                    elif self.type == "tribleNS_v2":
+                        momentum = group["momentum"]
+                        if self.adaptive_beta != "no":
+
+                            
+                            cosine_sim = self.compute_cosine_similarity(g, buf, self.adaptive_beta)
+                            momentum = momentum + (1-momentum) * cosine_sim
+                        
+                        buf.lerp_(g, 1 - momentum)
+                        g_ortho = zeropower_via_newtonschulz5(g, steps=group["ns_steps"]).to(dtype=torch.float32)
+                        buf_ortho = zeropower_via_newtonschulz5(buf, steps=group["ns_steps"]).to(dtype=torch.float32)
+                        g_muon = g_ortho.lerp_(buf_ortho, cli_args.muon_momentum_1)
+                        g_muon = zeropower_via_newtonschulz5(g_muon, steps=group["ns_steps"]).flatten()
+
+                    elif self.type == 'mix': # NS_momentum + double_momentum
+                        g_ortho = zeropower_via_newtonschulz5(g, steps=group["ns_steps"]).to(dtype=torch.float32)
+                        
+                        momentum_0 = group["momentum"][0]
+                        momentum_1 = group["momentum"][1]
+                        if self.adaptive_beta != "no":
+                            cosine_sim = self.compute_cosine_similarity(g, buf, self.adaptive_beta)
+                            momentum_0 = momentum_0 + (1-momentum_0) * cosine_sim
+                            momentum_1 = momentum_1 + (1-momentum_1) * cosine_sim
+                        
+                        buf.lerp_(g_ortho, 1 - momentum_0)
+                        g_muon = g_ortho.lerp_(buf, momentum_1).flatten().to(dtype=torch.bfloat16)
+                    else:
+                        raise ValueError(f"Unknown Muon type: {self.type}")
+                    
+                    g = g_muon
                 else:
                     g = update_buffer_views[self.rank]
                 if base_i > 0:
                     update_prev() # async all_gather instead of sync all_reduce by @YouJiacheng
+                if g.dtype != update_buffer.dtype:
+                    g = g.to(update_buffer.dtype)
                 handle = dist.all_gather_into_tensor(update_buffer, g, async_op=True)
                 params_world = params[base_i : base_i + self.world_size]
             update_prev()
@@ -328,7 +500,7 @@ class GPT(nn.Module):
         # there are only 50257 unique GPT-2 tokens; we extend to nearest multiple of 128 for efficiency.
         # suggested to me by @Grad62304977. this originates from Karpathy's experiments.
         self.lm_head = CastedLinear(model_dim, next_multiple_of_n(vocab_size, n=128),
-                                    use_fp8=True, x_s=(model_dim**0.5)/448, w_s=24/448, grad_s=1/448)
+                                    use_fp8=False, x_s=(model_dim**0.5)/448, w_s=24/448, grad_s=1/448)
         self.lm_head.weight.detach().zero_() # @Grad62304977
         # Add learnable skip connection weights for decoder layers
         assert num_layers % 2 == 0
@@ -345,7 +517,7 @@ class GPT(nn.Module):
 
         def dense_to_ordered(dense_blockmask: Tensor):
             num_blocks = dense_blockmask.sum(dim=-1, dtype=torch.int32)
-            indices = dense_blockmask.argsort(dim=-1, descending=False, stable=True).flip(-1).to(torch.int32)
+            indices = dense_blockmask.to(torch.int32).argsort(dim=-1, descending=False, stable=True).flip(-1).to(torch.int32)
             return num_blocks[None, None].contiguous(), indices[None, None].contiguous()
 
         # manual block mask creation by @YouJiacheng
@@ -459,7 +631,7 @@ args = Hyperparameters()
 # torchrun sets these env variables
 rank = int(os.environ["RANK"])
 world_size = int(os.environ["WORLD_SIZE"])
-assert world_size == 8 # this code is designed for 8xH100
+#assert world_size == 8 # this code is designed for 8xH100
 assert torch.cuda.is_available()
 device = torch.device("cuda", int(os.environ["LOCAL_RANK"]))
 torch.cuda.set_device(device)
@@ -467,19 +639,53 @@ dist.init_process_group(backend="nccl", device_id=device)
 dist.barrier()
 master_process = (rank == 0) # this process will do logging, checkpointing etc.
 
+# 创建TensorBoard writer
+name = cli_args.muon_type + str([cli_args.muon_momentum_0, cli_args.muon_momentum_1])
+tensorboard_writer = None
+if master_process:
+    tensorboard_writer = SummaryWriter(cli_args.tensorboard_path)
+
 # begin logging
 logfile = None
-if master_process:
-    run_id = uuid.uuid4()
-    os.makedirs("logs", exist_ok=True)
-    logfile = f"logs/{run_id}.txt"
-    print(logfile)
+if cli_args.wandb == "yes":
+    if master_process:
+        config_dict = vars(args).copy()
+        config_dict.update(vars(cli_args))
+        
+        # 创建唯一的run名称，避免冲突
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # 构建更详细的run名称，包含所有关键参数
+        name_parts = [cli_args.muon_type]
+        name_parts.append(f"m0_{cli_args.muon_momentum_0}")
+        name_parts.append(f"m1_{cli_args.muon_momentum_1}")
+        if cli_args.adaptive_beta != "no":
+            name_parts.append(cli_args.adaptive_beta)
+        name_parts.append(timestamp)
+        
+        run_name = "_".join(name_parts)
+        import uuid
+        run_id = run_name + "_" + str(uuid.uuid4())[:8]  # 确保run_id唯一
+        wandb.init(
+            project=cli_args.wandb_project,
+            id=run_name,
+            name=run_id,
+            config=config_dict,
+            resume="never",
+            reinit="finish_previous"
+        )
+
 def print0(s, console=False):
     if master_process:
-        with open(logfile, "a") as f:
+        if logfile:
+            with open(logfile, "a") as f:
+                if console:
+                    print(s)
+                print(s, file=f)
+        else:
             if console:
                 print(s)
-            print(s, file=f)
 
 # begin by printing this file (the Python code)
 print0(code)
@@ -493,15 +699,14 @@ def nvidia_smi():
 print0(nvidia_smi())
 print0("="*100)
 
-########################################train_seq_len = 48*1024 # FlexAttention sequence length
-    val_seq_len = 4*64*1024
+########################################
 #    Construct model and optimizer     #
 ########################################
 
 model: nn.Module = GPT(vocab_size=args.vocab_size, num_layers=12, num_heads=6, model_dim=768,
                        max_seq_len=max(args.train_seq_len, args.val_seq_len)).cuda()
 for m in model.modules():
-    if isinstance(m, nn.Embedding):
+    if isinstance(m, nn.Embedding):  
         m.bfloat16()
 for param in model.parameters():
     dist.broadcast(param.detach(), 0)
@@ -512,12 +717,30 @@ embed_params = [p for n, p in model.named_parameters() if "embed" in n]
 scalar_params = [p for p in model.parameters() if p.ndim < 2]
 head_params = [model.lm_head.weight]
 
+# 配置 momentum 参数
+cfg = {
+    "default": cli_args.muon_momentum_0,
+    "double_momentum": [cli_args.muon_momentum_0, cli_args.muon_momentum_1],
+    "double_momentum_reverse": [cli_args.muon_momentum_1, cli_args.muon_momentum_0],
+    "NS_momentum": cli_args.muon_momentum_0,
+    "doubleNS_momentum_v1": cli_args.muon_momentum_0,
+    "doubleNS_momentum_v2": cli_args.muon_momentum_0,
+    "tribleNS_v2": cli_args.muon_momentum_0, 
+    "mix": [cli_args.muon_momentum_0, cli_args.muon_momentum_1],
+    
+}
+
 # init the optimizer(s)
 adam_params = [dict(params=head_params, lr=0.22), dict(params=embed_params, lr=0.6), dict(params=scalar_params, lr=0.04)]
 # small adam epsilon by @YouJiacheng. this is an alternate method of fixing the world_size dependence
 # discovered by @fernbear.bsky.social https://x.com/hi_tysam/status/1879692937589875094
 optimizer1 = torch.optim.Adam(adam_params, betas=(0.8, 0.95), eps=1e-10, fused=True)
-optimizer2 = Muon(hidden_matrix_params, lr=0.05, momentum=0.95, rank=rank, world_size=world_size)
+
+# 根据muon_type选择不同的优化器配置
+optimizer2 = Muon(hidden_matrix_params, lr=0.05, weight_decay=0.01, momentum=cfg[cli_args.muon_type],
+                      rank=rank, world_size=world_size, type=cli_args.muon_type, adaptive_beta=cli_args.adaptive_beta)
+
+
 optimizers = [optimizer1, optimizer2]
 for opt in optimizers:
     for group in opt.param_groups:
@@ -546,6 +769,15 @@ def get_window_size_blocks(step: int):
     return get_window_size_blocks_helper(window_size)
 
 model: nn.Module = torch.compile(model, dynamic=False)
+
+# 记录训练配置信息
+if master_process:
+    print0("="*100, console=True)
+    print0(f"Muon Type: {cli_args.muon_type}", console=True)
+    print0(f"Muon Momentum 0: {cli_args.muon_momentum_0}", console=True)
+    print0(f"Muon Momentum 1: {cli_args.muon_momentum_1}", console=True)
+    print0(f"Adaptive Beta: {cli_args.adaptive_beta}", console=True)
+    print0("="*100, console=True)
 
 ########################################
 #            Warmup kernels            #
@@ -664,7 +896,7 @@ torch.cuda.synchronize()
 t0 = time.perf_counter()
 # begin training
 train_steps = args.num_iterations
-for step in range(train_steps + 1):
+for step in tqdm(range(train_steps + 1), desc=f"Training {cli_args.muon_type}", unit="step", disable=not master_process):
     last_step = (step == train_steps)
 
     # --------------- VALIDATION SECTION -----------------
@@ -676,7 +908,7 @@ for step in range(train_steps + 1):
         torch.cuda.synchronize()
         training_time_ms += 1000 * (time.perf_counter() - t0)
         model.eval()
-        val_batch_size = world_size * args.val_seq_len
+        val_batch_size = world_size * args.val_seq_len #总共需要处理的batch size, 均摊到每个GPU上
         assert args.val_tokens % val_batch_size == 0
         val_steps = args.val_tokens // val_batch_size
         val_loader = distributed_data_generator(args.val_files, val_batch_size, rank, world_size)
@@ -689,6 +921,16 @@ for step in range(train_steps + 1):
         del val_loader
         dist.all_reduce(val_loss, op=dist.ReduceOp.AVG)
         print0(f"step:{step}/{train_steps} val_loss:{val_loss:.4f} train_time:{training_time_ms:.0f}ms step_avg:{training_time_ms/max(step, 1):.2f}ms", console=True)
+        
+        # 记录到wandb
+        if cli_args.wandb == "yes" and master_process:
+            wandb.log({"val_loss": float(val_loss), "step": step})
+        
+        # 记录到TensorBoard
+        if tensorboard_writer is not None:
+            tensorboard_writer.add_scalar('Validation/Loss', float(val_loss), step)
+            tensorboard_writer.add_scalar('Training/Time_ms', training_time_ms, step)
+            tensorboard_writer.add_scalar('Training/Step_avg_ms', training_time_ms/max(step, 1), step)
         model.train()
         # start the clock again
         torch.cuda.synchronize()
@@ -697,14 +939,15 @@ for step in range(train_steps + 1):
     if last_step:
         if master_process and args.save_checkpoint:
             log = dict(step=step, code=code, model=model.state_dict(), optimizers=[opt.state_dict() for opt in optimizers])
-            os.makedirs(f"logs/{run_id}", exist_ok=True)
-            torch.save(log, f"logs/{run_id}/state_step{step:06d}.pt")
+            os.makedirs("logs", exist_ok=True)
+            torch.save(log, f"logs/state_step{step:06d}.pt")
         # the last step only has the validation loop, so break to avoid training
         break
 
     # --------------- TRAINING SECTION -----------------
     inputs, targets = next(train_loader)
-    model(inputs, targets, get_window_size_blocks(step)).backward()
+    train_loss = model(inputs, targets, get_window_size_blocks(step))
+    train_loss.backward()
     #for param in model.parameters():
     #    dist.all_reduce(param.grad, op=dist.ReduceOp.AVG)
     wait_for_gradients() # does the same thing as commented two lines above, but faster
@@ -722,9 +965,26 @@ for step in range(train_steps + 1):
     # null the gradients
     model.zero_grad(set_to_none=True)
     # logging
-    approx_training_time_ms = training_time_ms + 1000 * (time.perf_counter() - t0)
-    print0(f"step:{step+1}/{train_steps} train_time:{approx_training_time_ms:.0f}ms step_avg:{approx_training_time_ms/(step + 1):.2f}ms", console=True)
+    if  last_step or (args.val_loss_every > 0 and step % args.val_loss_every == 0):
+        approx_training_time_ms = training_time_ms + 1000 * (time.perf_counter() - t0)
+        normalized_train_loss = train_loss/args.train_seq_len
+        print0(f"step:{step+1}/{train_steps} train_loss:{normalized_train_loss:.4f} train_time:{approx_training_time_ms:.0f}ms step_avg:{approx_training_time_ms/(step + 1):.2f}ms", console=True)
+        
+        # 记录到wandb
+        if cli_args.wandb == "yes" and master_process:
+            wandb.log({"train_loss": float(normalized_train_loss), "step": step})
+        
+        # 记录到TensorBoard
+        if tensorboard_writer is not None:
+            tensorboard_writer.add_scalar('Training/Loss', float(normalized_train_loss), step)
 
 print0(f"peak memory allocated: {torch.cuda.max_memory_allocated() // 1024 // 1024} MiB "
        f"reserved: {torch.cuda.max_memory_reserved() // 1024 // 1024} MiB", console=True)
+
+# 关闭TensorBoard writer
+if master_process and tensorboard_writer is not None:
+    tensorboard_writer.close()
+    print0("TensorBoard writer closed", console=True)
+
 dist.destroy_process_group()
+

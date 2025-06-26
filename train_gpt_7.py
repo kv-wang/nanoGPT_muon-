@@ -21,19 +21,14 @@ import torch._inductor.config as config
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 # 添加命令行参数解析
-
 parser = argparse.ArgumentParser()
 parser.add_argument("--wandb", type = str, default="no", choices=["yes", "no"], help="Whether to use wandb for logging")
-#parser.add_argument("--warm_start", type = float, default=0.85, help="Warmup start value")
 parser.add_argument("--muon_momentum_0", type=float, default=0.95, help="Muon momentum[0] for nesterov")
 parser.add_argument("--muon_momentum_1", type=float, default=0.95, help="Muon momentum[1] for buf")
 parser.add_argument("--muon_type", type=str, default="default", help="Muon optimizer type")
-parser.add_argument("--adaptive_beta", type=str, default="no", choices=["yes", "no"], help="Whether to use adaptive beta based on cosine similarity")
+parser.add_argument("--adaptive_beta", type=str, default="no", choices=["cos","NS_cos", "no"], help="Whether to use adaptive beta based on cosine similarity")
 parser.add_argument("--tensorboard_path", type=str, default="logs_tensorboard_train7_6e-4_0.1_zkti", help="Tensorboard path")
 parser.add_argument("--wandb_project", type=str, default="train_gpt_7_6e-4_0.1_zkti", help="Wandb project")
-parser.add_argument("--adaptive_beta_cos", type=str, default="no", choices=["yes", "no"], help="Whether to use adaptive beta cosine")
-#parser.add_argument("--enable_grad_accu", type=str, default="no", choices=["yes", "no"], help="Whether to enable gradient accumulation")
-#parser.add_argument("--grad_accu_steps", type=int, default=32, help="Number of gradient accumulation steps when enabled")
 cli_args = parser.parse_args()
 
 # -----------------------------------------------------------------------------
@@ -79,7 +74,7 @@ def zeropower_via_newtonschulz5(G: Tensor, steps: int) -> Tensor:
 
 zeropower_backends = dict(svd=zeropower_via_svd, newtonschulz5=zeropower_via_newtonschulz5)
 
-class Muon(torch.optim.Optimizer): #按照Moonlight的paper的版本，支持多种动量模式
+class Muon(torch.optim.Optimizer):
     """
     Muon - MomentUm Orthogonalized by Newton-schulz
 
@@ -99,18 +94,15 @@ class Muon(torch.optim.Optimizer): #按照Moonlight的paper的版本，支持多
         lr: The learning rate used by the internal SGD.
         weight_decay: Weight decay factor for regularization.
         momentum: The momentum used by the internal SGD (can be single value or tuple for double_momentum).
-        nesterov: Whether to use Nesterov-style momentum in the internal SGD. (recommended)
         ns_steps: The number of Newton-Schulz iteration steps to use.
         type: Momentum type - 'default', 'double_momentum', 'svd_momentum', 'svd_momentum_v2'
     """
-    def __init__(self, params, lr=0.02, weight_decay=0.01, momentum=0.95, nesterov=True, ns_steps=5, rank=None, world_size=None, type='default', adaptive_beta=False):
-        if (rank is None) or (world_size is None):
-            raise Exception("world_size and rank params required, if you want to use this optimizer on a single GPU, pass rank=0 and world_size=1.")
+    def __init__(self, params, lr=0.02, weight_decay=0.01, momentum=0.95, ns_steps=5, rank=0, world_size=1, type='default', adaptive_beta="no"):
         self.rank = rank
         self.world_size = world_size
         self.type = type
-        self.adaptive_beta = adaptive_beta
-        defaults = dict(lr=lr, weight_decay=weight_decay, momentum=momentum, nesterov=nesterov, ns_steps=ns_steps)
+        self.adaptive_beta = cli_args.adaptive_beta
+        defaults = dict(lr=lr, weight_decay=weight_decay, momentum=momentum, ns_steps=ns_steps)
         params: list[Tensor] = [*params]
         param_groups = []
         for size in {p.numel() for p in params}:
@@ -120,22 +112,31 @@ class Muon(torch.optim.Optimizer): #按照Moonlight的paper的版本，支持多
             param_groups.append(group)
         super().__init__(param_groups, defaults)
 
-    def compute_cosine_similarity(self, g, buf):
+    def compute_cosine_similarity(self, g, buf, version):
         """计算g和buf之间的余弦相似度"""
-        g_flat = g.flatten()
-        buf_flat = buf.flatten()
-        
-        # 计算余弦相似度
-        dot_product = torch.dot(g_flat, buf_flat)
-        g_norm = torch.norm(g_flat)
-        buf_norm = torch.norm(buf_flat)
-        
-        # 避免除零
-        cosine_sim = (dot_product + 1e-8) / (g_norm * buf_norm + 1e-8)
-        import pdb; pdb.set_trace() #看一下cosine_sim的值
-        # 确保相似度在合理范围内，使用绝对值
-        #返回cosine_sim和0的较大值
-        return max(cosine_sim, 0)
+        if version == "cos":
+            g_flat = g.flatten()
+            buf_flat = buf.flatten()
+            
+            # 计算余弦相似度
+            dot_product = torch.dot(g_flat, buf_flat)
+            g_norm = torch.norm(g_flat)
+            buf_norm = torch.norm(buf_flat)
+            
+            # 避免除零
+            cosine_sim = dot_product / (g_norm * buf_norm + 1e-8) 
+            # 确保相似度在合理范围内，使用绝对值
+            # 返回cosine_sim和0的较大值
+            return max(cosine_sim, 0)
+        elif version == "NS_cos":
+            _ortho = zeropower_via_newtonschulz5(g, steps=5).flatten()
+            buf_ortho = zeropower_via_newtonschulz5(buf, steps=5).flatten()
+            g_norm = torch.norm(g_ortho)
+            buf_norm = torch.norm(buf_ortho)
+            dot_product = torch.dot(g_ortho.flatten(), buf_ortho.flatten())
+            cosine_sim = dot_product / (g_norm * buf_norm + 1e-8) 
+            return max(cosine_sim, 0)
+    
 
     @torch.no_grad()
     def step(self):
@@ -152,8 +153,6 @@ class Muon(torch.optim.Optimizer): #按照Moonlight的paper的版本，支持多
                     p_world.mul_(1 - group["lr"] * group["weight_decay"])
                     p_world.add_(g_world.view_as(p_world),
                                  alpha=-group["lr"] * 0.2 * max(p_world.size(-2), p_world.size(-1))**0.5) # 按照月之暗面的paper的learning rate scaling
-                    # p_world.add_(g_world.view_as(p_world),
-                    #              alpha=-group["lr"] * max(1, p_world.size(-2) / p_world.size(-1))**0.5)
             for base_i in range(len(params))[::self.world_size]:
                 if base_i + self.rank < len(params):
                     p = params[base_i + self.rank]
@@ -173,63 +172,118 @@ class Muon(torch.optim.Optimizer): #按照Moonlight的paper的版本，支持多
                     if self.type == 'default':
                         # 计算adaptive momentum
                         momentum = group["momentum"]
-                        if self.adaptive_beta:
-                            cosine_sim = self.compute_cosine_similarity(g, buf)
-                            momentum = momentum * cosine_sim
+                        if self.adaptive_beta != "no":
+                            cosine_sim = self.compute_cosine_similarity(g, buf, self.adaptive_beta)
+                            momentum = momentum + (1-momentum) * cosine_sim
                         
-                        buf.lerp_(g, 1 - momentum)
-                        g_muon = g.lerp_(buf, momentum) if group["nesterov"] else buf
+                        buf.lerp_(g, 1 - momentum) # 0.98
+                        g_muon = g.lerp_(buf, momentum)
                         g_muon = zeropower_via_newtonschulz5(g_muon, steps=group["ns_steps"]).flatten()
                     elif self.type == 'double_momentum':
                         # momentum[1] 用于 buf，momentum[0] 用于 nesterov
-                        momentum_0 = group["momentum"][0]
-                        momentum_1 = group["momentum"][1]
+                        momentum_0 = cli_args.muon_momentum_0
+                        momentum_1 = cli_args.muon_momentum_1
                         
-                        if self.adaptive_beta:
-                            cosine_sim = self.compute_cosine_similarity(g, buf)
-                            momentum_0 = momentum_0 * cosine_sim
-                            momentum_1 = momentum_1 * cosine_sim
+                        if self.adaptive_beta != "no":
+                            cosine_sim = self.compute_cosine_similarity(g, buf, self.adaptive_beta)
+                            momentum_0 = momentum_0 + (1-momentum_0) * cosine_sim
+                            momentum_1 = momentum_1 + (1-momentum_1) * cosine_sim
                         
-                        if group["nesterov"]:
-                            g_muon = g.lerp_(buf, momentum_0)
-                        else:
-                            g_muon = buf
+                        buf.lerp_(g, 1 - momentum_1) # 0.98
+                        g_muon = g.lerp_(buf, momentum_0) # 0.95
                         g_muon = zeropower_via_newtonschulz5(g_muon, steps=group["ns_steps"]).flatten()
-                        buf.lerp_(g, 1 - momentum_1) # 更新buf放在计算 g_muon 之后
+                    
+                    elif self.type == 'double_momentum_reverse':
+                        # momentum[1] 用于 buf，momentum[0] 用于 nesterov
+                        momentum_0 = cli_args.muon_momentum_0
+                        momentum_1 = cli_args.muon_momentum_1
+                        
+                        if self.adaptive_beta != "no":
+                            cosine_sim = self.compute_cosine_similarity(g, buf, self.adaptive_beta)
+                            momentum_0 = momentum_0 + (1-momentum_0) * cosine_sim
+                            momentum_1 = momentum_1 + (1-momentum_1) * cosine_sim
+                        
+                        g_muon = buf * momentum_1 + g * (1 - momentum_1)
+                        #g_muon = g.lerp_(g_muon, momentum_1) # 0.98
+                        g_muon = zeropower_via_newtonschulz5(g_muon, steps=group["ns_steps"]).flatten()
+                        buf.lerp_(g, 1 - momentum_1) # 0.98
                     elif self.type == 'svd_momentum':
                         momentum = group["momentum"]
-                        if self.adaptive_beta:
-                            cosine_sim = self.compute_cosine_similarity(g, buf)
-                            momentum = momentum * cosine_sim
+                        if self.adaptive_beta != "no":
+                            cosine_sim = self.compute_cosine_similarity(g, buf, self.adaptive_beta)
+                            momentum = momentum + (1-momentum) * cosine_sim
                         
                         buf.lerp_(g, 1 - momentum)
                         g_ortho = zeropower_via_newtonschulz5(g, steps=group["ns_steps"])
                         buf_ortho = zeropower_via_newtonschulz5(buf, steps=group["ns_steps"])
                         g_muon = g_ortho.lerp_(buf_ortho, momentum).flatten()
-                    elif self.type == 'svd_momentum_v2':
+                    elif self.type == 'NS_momentum':
                         g_ortho = zeropower_via_newtonschulz5(g, steps=group["ns_steps"]).to(dtype=torch.float32)
                         
                         momentum = group["momentum"]
-                        if self.adaptive_beta:
-                            cosine_sim = self.compute_cosine_similarity(g, buf)
-                            momentum = momentum * cosine_sim
+                        if self.adaptive_beta != "no":
+                            cosine_sim = self.compute_cosine_similarity(g, buf, self.adaptive_beta)
+                            momentum = momentum + (1-momentum) * cosine_sim
                         
                         buf.lerp_(g_ortho, 1 - momentum)
-                        g_muon = g_ortho.lerp_(buf, momentum).flatten().to(dtype=torch.bfloat16) if group["nesterov"] else buf.flatten().to(dtype=torch.bfloat16)
-                    elif self.type == 'mix': # svd_momentum_v2 + double_momentum
+                        g_muon = g_ortho.lerp_(buf, cli_args.muon_momentum_1).flatten().to(dtype=torch.bfloat16)
+                    
+                    elif self.type == "doubleNS_momentum_v1":
+                        # 再NS_momentum的基础上，对nesterov的更新也进行NS正交化,保证update的NS正交性
+                        g_ortho = zeropower_via_newtonschulz5(g, steps=group["ns_steps"]).to(dtype=torch.float32)
+                        
+                        momentum = group["momentum"]
+                        if self.adaptive_beta != "no":
+                            cosine_sim = self.compute_cosine_similarity(g, buf, self.adaptive_beta)
+                            momentum = momentum + (1-momentum) * cosine_sim
+                        
+                        buf.lerp_(g_ortho, 1 - momentum)
+                        g_muon = g_ortho.lerp_(buf, cli_args.muon_momentum_1).to(dtype=torch.bfloat16)
+                        g_muon = zeropower_via_newtonschulz5(g_muon, steps=group["ns_steps"]).flatten()
+                    
+                    elif self.type == "doubleNS_momentum_v2":
+                        # 计算adaptive momentum
+                        '''
+                        momentum的更新方式不变, update的时候,先对G进行NS，然后以0.5的beta对nesterov步骤，最后对update进行NS正交化
+                        '''
+                        momentum = group["momentum"]
+                        if self.adaptive_beta != "no":
+
+                            
+                            cosine_sim = self.compute_cosine_similarity(g, buf, self.adaptive_beta)
+                            momentum = momentum + (1-momentum) * cosine_sim
+                        
+                        buf.lerp_(g, 1 - momentum)
+                        g_ortho = zeropower_via_newtonschulz5(g, steps=group["ns_steps"]).to(dtype=torch.float32)
+                        g_muon = g_ortho.lerp_(buf, cli_args.muon_momentum_1).to(dtype=torch.bfloat16)
+                        g_muon = zeropower_via_newtonschulz5(g_muon, steps=group["ns_steps"]).flatten()
+                    
+                    elif self.type == "tribleNS_v2":
+                        momentum = group["momentum"]
+                        if self.adaptive_beta != "no":
+
+                            
+                            cosine_sim = self.compute_cosine_similarity(g, buf, self.adaptive_beta)
+                            momentum = momentum + (1-momentum) * cosine_sim
+                        
+                        buf.lerp_(g, 1 - momentum)
+                        g_ortho = zeropower_via_newtonschulz5(g, steps=group["ns_steps"]).to(dtype=torch.float32)
+                        buf_ortho = zeropower_via_newtonschulz5(buf, steps=group["ns_steps"]).to(dtype=torch.float32)
+                        g_muon = g_ortho.lerp_(buf_ortho, cli_args.muon_momentum_1)
+                        g_muon = zeropower_via_newtonschulz5(g_muon, steps=group["ns_steps"]).flatten()
+
+                    elif self.type == 'mix': # NS_momentum + double_momentum
                         g_ortho = zeropower_via_newtonschulz5(g, steps=group["ns_steps"]).to(dtype=torch.float32)
                         
                         momentum_0 = group["momentum"][0]
                         momentum_1 = group["momentum"][1]
-                        if self.adaptive_beta:
-                            cosine_sim = self.compute_cosine_similarity(g, buf)
-                            momentum_0 = momentum_0 * cosine_sim
-                            momentum_1 = momentum_1 * cosine_sim
+                        if self.adaptive_beta != "no":
+                            cosine_sim = self.compute_cosine_similarity(g, buf, self.adaptive_beta)
+                            momentum_0 = momentum_0 + (1-momentum_0) * cosine_sim
+                            momentum_1 = momentum_1 + (1-momentum_1) * cosine_sim
                         
                         buf.lerp_(g_ortho, 1 - momentum_0)
-                        g_muon = g_ortho.lerp_(buf, momentum_1).flatten().to(dtype=torch.bfloat16) if group["nesterov"] else buf.flatten().to(dtype=torch.bfloat16)
-                
-                        
+                        g_muon = g_ortho.lerp_(buf, momentum_1).flatten().to(dtype=torch.bfloat16)
                     else:
                         raise ValueError(f"Unknown Muon type: {self.type}")
                     
@@ -240,7 +294,7 @@ class Muon(torch.optim.Optimizer): #按照Moonlight的paper的版本，支持多
                     update_prev() # async all_gather instead of sync all_reduce by @YouJiacheng
                 if g.dtype != update_buffer.dtype:
                     g = g.to(update_buffer.dtype)
-                handle = dist.all_gather_into_tensor(update_buffer, g, async_op=True) #将每个GPU上的张量 g 收集到所有GPU上的 update_buffer 中
+                handle = dist.all_gather_into_tensor(update_buffer, g, async_op=True)
                 params_world = params[base_i : base_i + self.world_size]
             update_prev()
 # -----------------------------------------------------------------------------
@@ -462,7 +516,7 @@ class Hyperparameters:
     input_val_bin : str = 'data/fineweb10B/fineweb_val_*.bin' # input .bin to eval validation loss on
     # optimization hyperparams
     batch_size : int = 8*64 # batch size, in sequences, across all devices
-    device_batch_size : int = 64 # batch size, in sequences, per device
+    device_batch_size : int = 32 # batch size, in sequences, per device
     sequence_length : int = 1024 # sequence length, in tokens
     num_iterations : int = 10200 # number of iterations to run
     learning_rate : float = 0.0036
@@ -480,10 +534,13 @@ args = Hyperparameters()
 # 配置 momentum 参数
 cfg = {
     "default": cli_args.muon_momentum_0,
-    "double_momentum": [cli_args.muon_momentum_0, cli_args.muon_momentum_1], # momentum[0] for nesterov, momentum[1] for buf
-    "svd_momentum": cli_args.muon_momentum_0,
-    "svd_momentum_v2": cli_args.muon_momentum_0,
-    "mix": [cli_args.muon_momentum_0, cli_args.muon_momentum_1], # mix type uses double momentum
+    "double_momentum": [cli_args.muon_momentum_0, cli_args.muon_momentum_1],
+    "double_momentum_reverse": [cli_args.muon_momentum_1, cli_args.muon_momentum_0],
+    "NS_momentum": cli_args.muon_momentum_0,
+    "doubleNS_momentum_v1": cli_args.muon_momentum_0,
+    "doubleNS_momentum_v2": cli_args.muon_momentum_0,
+    "tribleNS_v2": cli_args.muon_momentum_0, 
+    "mix": [cli_args.muon_momentum_0, cli_args.muon_momentum_1],
 }
 
 # set up DDP (distributed data parallel). torchrun sets this env variable
@@ -507,19 +564,31 @@ if master_process:
 logfile = None
 if cli_args.wandb == "yes":
     if master_process:
-        '''
-        run_id = uuid.uuid4()
-        os.makedirs("logs", exist_ok=True)
-        logfile = f"logs/{run_id}.txt"
-        print(logfile)
-        '''
-        # 合并超参数和CLI参数用于wandb配置
         config_dict = vars(args).copy()
         config_dict.update(vars(cli_args))
         
+        # 创建唯一的run名称，避免冲突
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # 构建更详细的run名称，包含所有关键参数
+        name_parts = [cli_args.muon_type]
+        name_parts.append(f"m0_{cli_args.muon_momentum_0}")
+        name_parts.append(f"m1_{cli_args.muon_momentum_1}")
+        if cli_args.adaptive_beta != "no":
+            name_parts.append(cli_args.adaptive_beta)
+        name_parts.append(timestamp)
+        
+        run_name = "_".join(name_parts)
+        import uuid
+        run_id = run_name + "_" + str(uuid.uuid4())[:8]  # 确保run_id唯一
         wandb.init(
-            project=cli_args.wandb_project,  # <-- 修改为你的wandb项目名
-            name=cli_args.muon_type + str([cli_args.muon_momentum_0, cli_args.muon_momentum_1]),  # <-- 设置运行名称
+            project=cli_args.wandb_project,
+            id=run_name,
+            name=run_id,
+            config=config_dict,
+            resume="never",
+            reinit="finish_previous"
         )
 
 def print0(s, console=False):
@@ -568,28 +637,8 @@ optimizer1 = torch.optim.AdamW(raw_model.lm_head.parameters(), lr=args.learning_
                                weight_decay=args.weight_decay, fused=True)
 
 # 根据muon_type选择不同的优化器配置
-adaptive_beta_enabled = (cli_args.adaptive_beta == "yes")
-
-if cli_args.muon_type == "default":
-    optimizer2 = Muon(raw_model.transformer.h.parameters(), lr=0.1*args.learning_rate, weight_decay=0.1,momentum=cfg["default"],
-                      rank=ddp_rank, world_size=ddp_world_size, type='default', adaptive_beta=adaptive_beta_enabled)
-elif cli_args.muon_type == "double_momentum":
-    optimizer2 = Muon(raw_model.transformer.h.parameters(), lr=0.1*args.learning_rate, weight_decay=0.1, momentum=cfg["double_momentum"],
-                      rank=ddp_rank, world_size=ddp_world_size, type='double_momentum', adaptive_beta=adaptive_beta_enabled)
-elif cli_args.muon_type == "svd_momentum":
-    optimizer2 = Muon(raw_model.transformer.h.parameters(), lr=0.1*args.learning_rate, weight_decay=0.1, momentum=cfg["svd_momentum"],
-                      rank=ddp_rank, world_size=ddp_world_size, type='svd_momentum', adaptive_beta=adaptive_beta_enabled)
-elif cli_args.muon_type == "svd_momentum_v2":
-    optimizer2 = Muon(raw_model.transformer.h.parameters(), lr=0.1*args.learning_rate, weight_decay=0.1, momentum=cfg["svd_momentum_v2"],
-                      rank=ddp_rank, world_size=ddp_world_size, type='svd_momentum_v2', adaptive_beta=adaptive_beta_enabled)
-elif cli_args.muon_type == "mix":
-    optimizer2 = Muon(raw_model.transformer.h.parameters(), lr=0.1*args.learning_rate, weight_decay=0.1, momentum=cfg["mix"],
-                      rank=ddp_rank, world_size=ddp_world_size, type='mix', adaptive_beta=adaptive_beta_enabled)
-elif cli_args.muon_type == "adam":
-    optimizer2 = torch.optim.AdamW(raw_model.lm_head.parameters(), lr=args.learning_rate, betas=(0.9, 0.95),
-                                   weight_decay=args.weight_decay, fused=True)
-else:
-    raise ValueError(f"Unknown muon_type: {cli_args.muon_type}")
+optimizer2 = Muon(raw_model.transformer.h.parameters(), lr=0.1*args.learning_rate, weight_decay=0.1, momentum=cfg[cli_args.muon_type],
+                  rank=ddp_rank, world_size=ddp_world_size, type=cli_args.muon_type, adaptive_beta=cli_args.adaptive_beta)
 
 optimizers = [optimizer1, optimizer2]
 # learning rate decay scheduler (linear warmup and warmdown)
